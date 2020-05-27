@@ -99,9 +99,14 @@ class CPU:
 
         # read the memory address that's stored in register `PC`, and store that result in `IR`
         while True:
-            instruction_register = self.ram_read(self.pc)
-            self.branchtable[instruction_register]()
-  
+            ir = self.ram_read(self.pc)
+            if ir in self.branchtable:
+                self.branchtable[ir]()
+
+            else:
+                print(f"instruction_register{hex(ir)} not recognized")
+                break
+
     def handle_hlt(self):
         sys.exit()
 
@@ -139,7 +144,7 @@ class CPU:
         self.sp += 1
         self.pc += 2
 
-    def handle_push(self, operand_a, operand_b):
+    def handle_push(self):
         """
         Decrement the SP.
         Copy the value in the given register to the address pointed to by SP
