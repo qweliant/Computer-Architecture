@@ -2,6 +2,16 @@
 
 import sys
 
+HLT = 0b00000001
+LDI = 0b10000010
+PRN = 0b01000111
+MUL = 0b10100010
+POP = 0b01000110
+PUSH = 0b01000101
+RET = 0b00010001
+CALL = 0b01010000
+ADD = 0b10100000
+
 
 class CPU:
     """Main CPU class."""
@@ -15,6 +25,16 @@ class CPU:
         # memory storage for ram
         self.ram = [0] * 256
         self.sp = 0xF3  # stack pointer - points at the value at the top of the stack
+        self.branchtable = {}
+        self.branchtable[MUL] = self.handle_mul
+        self.branchtable[ADD] = self.handle_add
+        self.branchtable[LDI] = self.handle_ldi
+        self.branchtable[HLT] = self.handle_hlt
+        self.branchtable[PRN] = self.handle_prn
+        self.branchtable[POP] = self.handle_pop
+        self.branchtable[PUSH] = self.handle_push
+        self.branchtable[RET] = self.handle_ret
+        self.branchtable[CALL] = self.handle_call
 
     def load(self):
         """Load a program into memory."""
@@ -27,6 +47,7 @@ class CPU:
                 if string_val == "":
                     continue
                 v = int(string_val, 2)
+                # load program into memory
                 self.ram[address] = v
                 address += 1
 
@@ -76,92 +97,67 @@ class CPU:
         the `PC` needs to be updated to point to the next instruction_register 
         for the next iteration of the loop in `run()`"""
 
-        # _instruction_register Register_ contains a copy of the currently executing instruction_register
-
-        HLT = 0b00000001
-        LDI = 0b10000010
-        PRN = 0b01000111
-        MUL = 0b10100010
-        POP = 0b01000110
-        PUSH = 0b01000101
-        RET = 0b00010001
-        CALL = 0b01010000
-        ADD = 0b10100000
-
         # read the memory address that's stored in register `PC`, and store that result in `IR`
         while True:
             instruction_register = self.ram_read(self.pc)
-            operand_a = self.ram_read(self.pc + 1)
-            operand_b = self.ram_read(self.pc + 2)
-            if instruction_register == HLT:
-                # Halt the CPU (and exit the emulator).
-                break
-            elif instruction_register == LDI:
-                # Set the value of a register to an integer.
-                self.reg[operand_a] = operand_b
-
-                self.pc = self.pc + 3
-            elif instruction_register == PRN:
-                """
-                Print to the console the decimal integer value that is stored in the given register.
-                """
-                print(self.reg[operand_a])
-
-                self.pc = self.pc + 2
-            elif instruction_register == MUL:
-                """
-                Multiply the values in two registers together and store the result in registerA.
-                """
-                self.alu("MUL", operand_a, operand_b)
-
-                self.pc = self.pc + 3
-            elif instruction_register == POP:
-                """
-                Pop the value at the top of the stack into the given register.
-
-                Copy the value from the address pointed to by SP to the given register.
-                Increment SP.
-                """
-                self.reg[operand_a] = self.ram_read(self.sp + 1)
-                self.sp += 1
-                self.pc += 2
-            elif instruction_register == PUSH:
-                self.ram_write(self.sp, self.reg[operand_a])
-                self.pc += 2
-                self.sp -= 1
-            elif instruction_register == ADD:
-                self.alu("ADD", operand_a, operand_b)
-                self.pc += 3
-            elif instruction_register == CALL:
-                self.sp -= 1
-                self.ram_write(self.sp, self.pc + 2)
-                self.pc = self.reg[operand_a]
-            elif instruction_register == RET:
-                # Return from subroutine. Pop the value from the top of the stack and store it in the PC
-                # next instruction to add to stack,
-                self.pc = self.ram_read(self.sp)
-                self.sp += 1
-            else:
-                print(f"instruction_register{hex(instruction_register)} not recognized")
-                break
-
+            self.branchtable[instruction_register]()
+  
     def handle_hlt(self):
         sys.exit()
 
-    def handle_ldi(self, operand_a, operand_b):
+    def handle_ldi(self):
+        operand_a = self.ram_read(self.pc + 1)
+        operand_b = self.ram_read(self.pc + 2)
         self.reg[operand_a] = operand_b
-        print("LDI pc + 3")
         self.pc = self.pc + 3
 
-    def handle_prn(self, operand_a):
+    def handle_mul(self):
+        operand_a = self.ram_read(self.pc + 1)
+        operand_b = self.ram_read(self.pc + 2)
+        self.alu("MUL", operand_a, operand_b)
+        self.pc = self.pc + 3
+
+    def handle_add(self):
+        operand_a = self.ram_read(self.pc + 1)
+        operand_b = self.ram_read(self.pc + 2)
+        self.alu("ADD", operand_a, operand_b)
+        self.pc = self.pc + 3
+
+    def handle_prn(self):
+        operand_a = self.ram_read(self.pc + 1)
         print(self.reg[operand_a])
-        print("PRN pc + 2")
         self.pc = self.pc + 2
 
-    def handle_mul(self, operand_a, operand_b):
-        print(self.reg[operand_a] * self.reg[operand_b])
-        print("MUL pc + 3")
-        self.pc = self.pc + 3
+    def handle_pop(self):
+        """
+        Pop the value at the top of the stack into the given register.
+        Copy the value from the address pointed to by SP to the given register.
+        Increment SP.
+        """
+        operand_a = self.ram_read(self.pc + 1)
+        self.reg[operand_a] = self.ram_read(self.sp + 1)
+        self.sp += 1
+        self.pc += 2
+
+    def handle_push(self, operand_a, operand_b):
+        """
+        Decrement the SP.
+        Copy the value in the given register to the address pointed to by SP
+        """
+        operand_a = self.ram_read(self.pc + 1)
+        self.ram_write(self.sp, self.reg[operand_a])
+        self.pc += 2
+        self.sp -= 1
+
+    def handle_call(self):
+        operand_a = self.ram_read(self.pc + 1)
+        self.sp -= 1
+        self.ram_write(self.sp, self.pc + 2)
+        self.pc = self.reg[operand_a]
+
+    def handle_ret(self):
+        self.pc = self.ram_read(self.sp)
+        self.sp += 1
 
     def ram_read(self, address_to_read):
         """accept the address to read and return the value stored there."""
