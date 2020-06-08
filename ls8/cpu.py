@@ -1,6 +1,9 @@
 """CPU functionality."""
-
+import re
 import sys
+import tty
+import termios
+from datetime import datetime
 
 # ALU INSTRUCTIONS
 MUL = 0b10100010
@@ -42,6 +45,7 @@ POP = 0b01000110
 PRN = 0b01000111
 PRA = 0b01001000
 
+
 class CPU:
     """Main CPU class."""
 
@@ -54,6 +58,8 @@ class CPU:
         # memory storage for ram
         self.ram = [0] * 256
         self.sp = 0xF3  # stack pointer - points at the value at the top of the stack
+        self.fl = 0b11000000  # Flags Register
+
         self.branchtable = {}
         self.branchtable[MUL] = self.handle_mul
         self.branchtable[ADD] = self.handle_add
@@ -64,21 +70,47 @@ class CPU:
         self.branchtable[PUSH] = self.handle_push
         self.branchtable[RET] = self.handle_ret
         self.branchtable[CALL] = self.handle_call
+        self.branchtable[JMP] = self.handle_jmp
+        self.branchtable[ST] = self.handle_st
+        self.branchtable[IRET] = self.handle_iret
+
+
+    # Interrupt Mask is R5
+    @property
+    def IM(self):
+        return self.registers[5]
+
+    @IM.setter
+    def IM(self, value):
+        self.registers[5] = value
+
+    # Interrupt Status is R6
+    @property
+    def IS(self):
+        return self.registers[6]
+
+    @IS.setter
+    def IS(self, value):
+        self.registers[6] = value
 
     def load(self):
         """Load a program into memory."""
 
-        address = 0
+        try:
+            address = 0
+            with open(sys.argv[1]) as f:
+                for line in f:
+                    string_val = line.split("#")[0].strip()
+                    if string_val == "":
+                        continue
+                    v = int(string_val, 2)
+                    # load program into memory
+                    self.ram[address] = v
+                    address += 1
 
-        with open(sys.argv[1]) as f:
-            for line in f:
-                string_val = line.split("#")[0].strip()
-                if string_val == "":
-                    continue
-                v = int(string_val, 2)
-                # load program into memory
-                self.ram[address] = v
-                address += 1
+        except FileNotFoundError:
+            print("File not found")
+            sys.exit(2)
 
     def alu(self, op, operand_a, operand_b):
         """ALU operations."""
@@ -87,7 +119,16 @@ class CPU:
             self.reg[operand_a] += self.reg[operand_b]
         elif op == "MUL":
             self.reg[operand_a] = self.reg[operand_a] * self.reg[operand_b]
-        # elif op == "SUB": etc
+        elif op == "XOR":
+            self.reg[operand_a] = self.reg[operand_a] ^ self.reg[operand_b]
+        elif op == "AND":
+            self.reg[operand_a] = self.reg[operand_a] & self.reg[operand_b]
+        elif op == "OR":
+            self.reg[operand_a] = self.reg[operand_a] | self.reg[operand_b]
+        elif op == "SHR":
+            self.reg[operand_a] = self.reg[operand_a] >> self.reg[operand_b]
+        elif op == "SHL":
+            self.reg[operand_a] = self.reg[operand_a] << self.reg[operand_b] & 0xFF
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -145,6 +186,11 @@ class CPU:
         self.reg[operand_a] = operand_b
         self.pc = self.pc + 3
 
+    def handle_st(self):
+        operand_a = self.ram_read(self.pc + 1)
+        operand_b = self.ram_read(self.pc + 2)
+        self.ram_write(self, operand_b, operand_a)
+
     def handle_mul(self):
         operand_a = self.ram_read(self.pc + 1)
         operand_b = self.ram_read(self.pc + 2)
@@ -192,6 +238,30 @@ class CPU:
     def handle_ret(self):
         self.pc = self.ram_read(self.sp)
         self.sp += 1
+
+    def handle_jmp(self):
+        """Jump to the address stored in the given register."""
+        operand_a = self.ram_read(self.pc + 1)
+        self.pc = self.reg[operand_a]
+
+    def handle_st(self):
+        """"""
+        # operand_a = self.ram_read(self.pc + 1)
+        # operand_b = self.ram_read(self.pc + 2)
+        # self.ram_write(self.reg[operand_a], self.reg[operand_b])
+        print("ST")
+
+    def handle_iret(self):
+
+        for r in range(6, -1, -1):
+            self.branchtable[POP]()
+
+        self.fl = self.ram_read(self.sp)
+        self.sp += 1
+        self.pc = self.ram_read(self.sp)
+        self.sp += 1
+
+        self.fl = self.fl | 0b01000000      
 
     def ram_read(self, address_to_read):
         """accept the address to read and return the value stored there."""
