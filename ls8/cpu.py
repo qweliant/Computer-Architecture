@@ -60,20 +60,22 @@ class CPU:
         self.sp = 0xF3  # stack pointer - points at the value at the top of the stack
         self.fl = 0b11000000  # Flags Register
 
-        self.branchtable = {}
-        self.branchtable[MUL] = self.handle_mul
-        self.branchtable[ADD] = self.handle_add
-        self.branchtable[LDI] = self.handle_ldi
-        self.branchtable[HLT] = self.handle_hlt
-        self.branchtable[PRN] = self.handle_prn
-        self.branchtable[POP] = self.handle_pop
-        self.branchtable[PUSH] = self.handle_push
-        self.branchtable[RET] = self.handle_ret
-        self.branchtable[CALL] = self.handle_call
-        self.branchtable[JMP] = self.handle_jmp
-        self.branchtable[ST] = self.handle_st
-        self.branchtable[IRET] = self.handle_iret
+        self.branchtable = {
+            MUL = self.handle_mul,
+            ADD = self.handle_add,
+            LDI = self.handle_ldi,
+            HLT = self.handle_hlt,
+            PRN = self.handle_prn,
+            POP = self.handle_pop,,
+            PUSH = self.handle_push,
+            RET = self.handle_ret,
+            CALL = self.handle_call,
+            JMP = self.handle_jmp,
+            ST = self.handle_st,
+            IRET = self.handle_iret
 
+        }
+        
 
     # Interrupt Mask is R5
     @property
